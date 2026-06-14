@@ -6,6 +6,7 @@ import {
 
 import { importSnapshot } from "./importSnapshot";
 import { applyChanges } from "./applyChanges";
+import { getPendingDeltas } from "./getPendingDeltas";
 
 export async function runEngine() {
     console.log("ENGINE START");
@@ -33,17 +34,29 @@ export async function runEngine() {
             null
         );
 
-        const rowsImported =
-            await importSnapshot("notes");
+        const rowsImported = await importSnapshot("notes");
+        const deltas = await getPendingDeltas();
 
-        await applyChanges();
+
+        console.log(`PENDING DELTAS: ${deltas.length}`
+        );
+
+        const appliedChanges = await applyChanges(deltas);
+
+        const currentCursor =
+            Number(
+                existingState?.last_cursor ?? 0
+            );
+
+        const nextCursor =
+            currentCursor + appliedChanges;
 
         saveSyncState(
             "notes",
             "done",
+            String(nextCursor),
             null,
-            null,
-            rowsImported,
+            rowsImported + appliedChanges,
             null
         );
 

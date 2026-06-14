@@ -40,9 +40,22 @@ Actualmente el proyecto implementa:
 * Replicación de datos hacia DuckDB.
 * Re-ejecución segura evitando snapshots duplicados.
 * Recuperación desde estados de error.
+* Aplicación incremental de cambios mediante deltas.
+* Cursores persistentes utilizando `last_cursor`.
+* Filtrado de cambios ya procesados mediante cursor.
 * Suite de pruebas automatizadas.
 
-No se encuentra implementado todavía el consumo directo de los endpoints `list_snapshot` y `document_deltas` de Streaming Export.
+La implementación actual no consume todavía los endpoints oficiales `list_snapshot` y `document_deltas` de Streaming Export.
+
+Para validar la arquitectura incremental solicitada por la evaluación, se implementó una fuente de deltas simulada que permite ejercitar:
+
+* Aplicación incremental de cambios.
+* Persistencia de cursores.
+* Recuperación de estado.
+* Idempotencia.
+* Reanudación basada en checkpoints.
+
+La integración directa con Streaming Export queda identificada como el siguiente paso natural de evolución del proyecto.
 
 
 ## Instalación
@@ -98,19 +111,6 @@ Ejecutar toda la suite:
 ```bash
 bun test
 ```
-
-Tests implementados actualmente:
-
-| Test                  | Objetivo                                                      |
-| --------------------- | ------------------------------------------------------------- |
-| duckdb.test.ts        | Inserción y eliminación de registros                          |
-| idempotency.test.ts   | Verificar que la re-aplicación no genera duplicados           |
-| snapshot.test.ts      | Validar consistencia del snapshot                             |
-| engine.test.ts        | Validar ejecución completa del motor                          |
-| engineRerun.test.ts   | Verificar que un snapshot completado no se ejecuta nuevamente |
-| recovery.test.ts      | Persistencia de errores                                       |
-| errorRecovery.test.ts | Recuperación desde estado de error                            |
-| --------------------- | ------------------------------------------------------------- |
 
 
 ## Decisiones de Arquitectura
@@ -216,7 +216,6 @@ La prioridad principal fue validar la correctitud de la sincronización antes de
 
 ### Tests Implementados
 
-
 #### duckdb.test.ts
 
 Valida:
@@ -261,6 +260,7 @@ Valida:
 
 * Ejecución completa del motor.
 * Actualización correcta del estado.
+* Persistencia del cursor.
 
 Motivo:
 
@@ -302,20 +302,124 @@ Motivo:
 
 Demostrar capacidad básica de recuperación.
 
+---
+
+#### applyDelta.test.ts
+
+Valida:
+
+* Aplicación de operaciones insert.
+* Aplicación de operaciones update.
+* Aplicación de operaciones delete.
+
+Motivo:
+
+Garantizar que los cambios incrementales se reflejan correctamente en DuckDB.
+
+---
+
+#### applyChanges.test.ts
+
+Valida:
+
+* Aplicación secuencial de múltiples deltas.
+* Conteo correcto de cambios aplicados.
+* Idempotencia ante re-ejecuciones.
+
+Motivo:
+
+Validar el comportamiento del motor incremental.
+
+---
+
+#### getPendingDeltas.test.ts
+
+Valida:
+
+* Lectura de deltas pendientes.
+* Respeto del cursor actual.
+
+Motivo:
+
+Garantizar que solo se procesan cambios no consumidos.
+
+---
+
+#### cursorPersistence.test.ts
+
+Valida:
+
+* Persistencia de `last_cursor`.
+
+Motivo:
+
+Garantizar que el progreso de sincronización sobrevive entre ejecuciones.
+
+---
+
+#### cursorFiltering.test.ts
+
+Valida:
+
+* Exclusión de deltas previamente procesados.
+
+Motivo:
+
+Evitar reprocesamiento innecesario.
+
+---
+
+#### cursorResume.test.ts
+
+Valida:
+
+* Reutilización del cursor persistido después de una ejecución del motor.
+
+Motivo:
+
+Demostrar capacidad de reanudación basada en checkpoints.
+
+---
+
+#### snapshotRecovery.test.ts
+
+Valida:
+
+* Re-ejecución segura del snapshot.
+* Convergencia al mismo estado final.
+
+Motivo:
+
+Demostrar resiliencia ante interrupciones durante la carga inicial.
+
 
 ### Qué No Testeé
 
 No se implementaron pruebas para:
 
-* Streaming Export real.
-* Consumo de `document_deltas`.
-* Recuperación basada en cursores persistentes.
+* Integración real con Streaming Export.
+* Consumo directo de `list_snapshot`.
+* Consumo directo de `document_deltas`.
+* Integración con MotherDuck.
+* Migraciones automáticas de esquema.
+* Watchdog de recuperación automática.
 * Pruebas de carga sostenida.
 * Pruebas de rendimiento.
 
 Motivo:
 
-Se priorizó validar primero la consistencia funcional del motor base antes de abordar optimizaciones y escalabilidad.
+Se priorizó validar primero la consistencia funcional del motor de sincronización, la persistencia de estado, la idempotencia y la lógica de cursores.
+
+La arquitectura actual ya incluye:
+
+* Persistencia de cursores.
+* Filtrado de cambios mediante cursor.
+* Aplicación incremental de deltas.
+* Reanudación basada en checkpoints.
+
+Sin embargo, la fuente de cambios utilizada durante las pruebas es una implementación local controlada y no los endpoints oficiales de Streaming Export.
+
+Dado el tiempo disponible para la evaluación, se priorizó demostrar correctamente la arquitectura de sincronización y recuperación antes de incorporar dependencias externas y escenarios de escalabilidad.
 
 
 ## Cómo se Recupera de Fallos
@@ -352,17 +456,6 @@ Una vez corregida la causa del fallo:
 3. El motor puede continuar operando normalmente.
 
 
-### Limitaciones Actuales
-
-La recuperación basada en cursores persistentes aún no se encuentra implementada.
-
-Actualmente la recuperación se basa en:
-
-* Persistencia de estado.
-* Idempotencia.
-* Re-ejecución segura.
-
-
 ## Uso de IA
 
 Se utilizó inteligencia artificial como herramienta de asistencia durante el desarrollo.
@@ -391,7 +484,17 @@ Snapshot Export (JSONL)
    ↓
 importSnapshot()
    ↓
-engine.ts
+DuckDB
+
+Fuente de Deltas
+   ↓
+getPendingDeltas()
+   ↓
+Cursor Persistente
+   ↓
+applyChanges()
+   ↓
+applyDelta()
    ↓
 DuckDB
    ↓
@@ -418,38 +521,50 @@ Estado Persistente
 
 ## Limitaciones Actuales
 
-La implementación actual no consume directamente los endpoints de Streaming Export de Convex.
+La implementación actual no consume directamente los endpoints oficiales de Streaming Export de Convex.
 
-Actualmente el flujo de sincronización se basa en snapshots exportados manualmente a archivos JSONL.
+Actualmente el flujo de sincronización utiliza:
+
+* Snapshots exportados manualmente en formato JSONL.
+* Una fuente de deltas simulada para validar el comportamiento incremental.
+* Persistencia de estado y cursores en DuckDB.
 
 No se encuentran implementados todavía:
 
-- document_deltas
-- Cursores persistentes
-- Watchdog de recuperación automática
-- Migraciones automáticas de esquema
-- Componente reutilizable de Convex
+* Integración directa con `list_snapshot`.
+* Integración directa con `document_deltas`.
+* Integración nativa con MotherDuck.
+* Migraciones automáticas de esquema.
+* Watchdog de recuperación automática.
+* Reintentos automáticos con backoff.
 
-Estas funcionalidades fueron identificadas y documentadas como siguientes pasos de evolución del proyecto.
+La persistencia de cursores, el filtrado de cambios ya procesados y la aplicación incremental de deltas sí se encuentran implementados y cubiertos mediante pruebas automatizadas.
+
+Estas funcionalidades permiten validar la arquitectura principal de sincronización antes de incorporar dependencias externas y mecanismos avanzados de operación.
 
 
 ## Trabajo Futuro
 
-Las siguientes mejoras permitirían acercar la implementación al diseño completo solicitado por la evaluación:
+Las siguientes mejoras permitirían evolucionar la implementación hacia una solución completa basada en Streaming Export y CDC:
 
 * Integración directa con `list_snapshot`.
 * Integración directa con `document_deltas`.
-* Cursores persistentes.
-* Reintentos automáticos con backoff.
+* Consumo continuo de cambios desde Convex.
+* Persistencia de cursores utilizando los identificadores reales de Streaming Export.
+* Reintentos automáticos con backoff exponencial.
 * Watchdog de recuperación automática.
 * Migraciones automáticas de esquema.
 * Compatibilidad nativa con MotherDuck.
-* Conversión del motor en un componente reutilizable de Convex.
+* Conversión del motor en un componente reutilizable para múltiples tablas de Convex.
+
+La arquitectura actual fue diseñada para facilitar esta evolución incremental.
+
+Los componentes de snapshot, aplicación de cambios, persistencia de estado, cursores e idempotencia ya se encuentran desacoplados y validados mediante pruebas automatizadas, reduciendo el esfuerzo necesario para incorporar los endpoints oficiales de Streaming Export.
 
 
 ## Conclusión
 
-La implementación actual establece una base funcional para un motor de sincronización entre Convex y DuckDB.
+La implementación actual demuestra una arquitectura funcional de sincronización incremental basada en snapshots, aplicación de deltas, persistencia de estado e idempotencia, preparada para evolucionar hacia una integración directa con Streaming Export.
 
 Se priorizaron:
 
