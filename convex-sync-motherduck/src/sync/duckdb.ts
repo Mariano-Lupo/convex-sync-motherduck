@@ -1,6 +1,7 @@
 import duckdb from "duckdb";
 
-const db = new duckdb.Database("sync.duckdb");
+const dbPath = process.env.DUCKDB_PATH ?? "sync.duckdb";
+const db = new duckdb.Database(dbPath);
 
 export function createConnection() {
     return db.connect();
