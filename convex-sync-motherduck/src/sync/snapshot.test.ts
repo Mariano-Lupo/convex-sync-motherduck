@@ -14,7 +14,7 @@ describe("Snapshot import", () => {
         const sourceLines = sourceText.length > 0 ? sourceText.split(/\r?\n/) : [];
         const sourceRows = sourceLines.map((line) => JSON.parse(line) as { _id: string });
 
-        const importedCount = await importSnapshot();
+        const importedCount = await importSnapshot("notes");
         const importedNotes = await getAllNotes();
 
         expect(importedCount).toBe(sourceRows.length);

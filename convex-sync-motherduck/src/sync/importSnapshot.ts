@@ -6,14 +6,14 @@ import {
     getAllNotes,
 } from "./duckdb";
 
-export async function importSnapshot() {
+export async function importSnapshot(tableName: string) {
     console.log("SNAPSHOT IMPORT START");
 
     createNotesTable();
     clearNotesTable();
 
     const fileContents = readFileSync(
-        "export/notes/documents.jsonl",
+        `export/${tableName}/documents.jsonl`,
         "utf-8"
     );
 

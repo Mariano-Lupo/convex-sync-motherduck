@@ -33,7 +33,7 @@ export async function runEngine() {
         );
 
         const rowsImported =
-            await importSnapshot();
+            await importSnapshot("notes");
 
         saveSyncState(
             "notes",
