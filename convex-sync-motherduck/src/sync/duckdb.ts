@@ -198,3 +198,24 @@ export function deleteNote(id: string) {
 
     conn.close();
 }
+
+
+export function updateNote(note: {
+    id: string;
+    title: string;
+    completed: boolean;
+    updatedAt: number;
+}) {
+    const conn = createConnection();
+
+    conn.run(`
+        UPDATE notes
+        SET
+            title = '${note.title}',
+            completed = ${note.completed},
+            updatedAt = ${note.updatedAt}
+        WHERE id = '${note.id}'
+    `);
+
+    conn.close();
+}
