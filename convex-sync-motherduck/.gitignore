@@ -22,3 +22,13 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+# DuckDB
+*.duckdb
+*.duckdb.wal
+
+# Test databases
+.tmp/
+
+# Convex snapshot exports
+export/
