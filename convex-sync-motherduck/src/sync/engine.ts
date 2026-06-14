@@ -5,6 +5,7 @@ import {
 } from "./duckdb";
 
 import { importSnapshot } from "./importSnapshot";
+import { applyChanges } from "./applyChanges";
 
 export async function runEngine() {
     console.log("ENGINE START");
@@ -25,7 +26,7 @@ export async function runEngine() {
     try {
         saveSyncState(
             "notes",
-            "running",
+            "snapshot_running",
             null,
             null,
             0,
@@ -34,6 +35,8 @@ export async function runEngine() {
 
         const rowsImported =
             await importSnapshot("notes");
+
+        await applyChanges();
 
         saveSyncState(
             "notes",
