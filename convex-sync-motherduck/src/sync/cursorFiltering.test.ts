@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 
 import {
+    createSyncStateTable,
     saveSyncState,
 } from "./duckdb";
 
@@ -12,6 +13,7 @@ describe("Cursor Filtering", () => {
     test(
         "filters already applied deltas",
         async () => {
+            createSyncStateTable();
             saveSyncState(
                 "cursor_filter_test",
                 "done",
