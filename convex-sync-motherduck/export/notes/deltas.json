@@ -1,0 +1,10 @@
+[
+    {
+        "operation": "insert",
+        "id": "delta-test-1",
+        "title": "Pending Delta",
+        "completed": false,
+        "createdAt": 1,
+        "updatedAt": 1
+    }
+]
